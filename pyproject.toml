@@ -38,7 +38,7 @@ lint.select = ["E", "F", "W", "N", "RUF", "I001", "UP", "B", "PTH", "PL"]
 lint.ignore = ["E501"]
 fix = true
 line-length = 120
-target-version = "py39"
+target-version = "py313"
 extend-include = [".CMakePresets.json.in", "docs/conf.py.in"]
 
 [tool.ruff.lint.per-file-ignores]
