@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dune-mirrorer"
+version = "0.1.0"
+description = "Tool for mirroring repositories from GitLab to GitHub"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "MIT"}
+dependencies = [
+    "requests",
+    "pynacl",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+]
+
+[tool.setuptools]
+py-modules = ["infra_setup", "repos_to_matrix"]
+
+[tool.ruff]
+# Enable Pyflakes and pycodestyle rules.
+# see https://github.com/charliermarsh/ruff#supported-rules
+# F = Pyflakes
+# E,W = pycodestyle
+# N = pep8-naming
+# UP = pyupgrade
+# B = bugbear
+# PTH = flake8-use-pathlib
+# PL = pylint
+lint.select = ["E", "F", "W", "N", "RUF", "I001", "UP", "B", "PTH", "PL"]
+# E501: line too long
+lint.ignore = ["E501"]
+fix = true
+line-length = 120
+target-version = "py39"
+extend-include = [".CMakePresets.json.in", "docs/conf.py.in"]
+
+[tool.ruff.lint.per-file-ignores]
+# ignore magic numbers in test sources (matches clang-tidy setup for tests/*)
+"tests/python/*" = ["PLR2004"]

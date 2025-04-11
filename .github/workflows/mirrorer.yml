@@ -6,8 +6,11 @@ on:
   - cron: '0 0 * * *'
   workflow_dispatch:
   push:
-
-# dune-fem dune-grid-glue dune-grid dune-common dune-istl dune-localfunctions dune-geometry dune-functions dune-pdelab dune-typetree dune-uggrid dune-spgrid dune-testtools dune-alugrid dune-python
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
 
 jobs:
   repos:
@@ -15,7 +18,7 @@ jobs:
     outputs:
       repos: ${{ steps.repos.outputs.repos }}
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v4
     - id: repos
       run: |
         { echo 'repos<<EOF' ;
