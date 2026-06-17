@@ -36,14 +36,53 @@ jobs:
     - uses: webfactory/ssh-agent@v0.9.1
       with:
         ssh-private-key: ${{ secrets[format('SSH_KEY_{0}', matrix.keyname )] }}
-    - run: |
-        git clone --mirror ${{ matrix.url }} ${{ matrix.module_name }}
-        cd ${{ matrix.module_name }}
-        git remote set-url --push origin git@github.com:dune-mirrors/${{ matrix.module_name }}.git
+    - name: Mirror ${{ matrix.module_name }}
+      env:
+        MODULE_NAME: ${{ matrix.module_name }}
+        SOURCE_URL: ${{ matrix.url }}
+      run: |
+        set -euo pipefail
+        trap 'echo "::error title=mirror failed::${MODULE_NAME}: failed during \"${phase:-unknown}\" phase"' ERR
+
+        echo "=== Mirroring ${MODULE_NAME} ==="
+        echo "source: ${SOURCE_URL}"
+        echo "target: git@github.com:dune-mirrors/${MODULE_NAME}.git"
+
+        phase=clone
+        echo "::group::clone (mirror) ${SOURCE_URL}"
+        git clone --mirror "${SOURCE_URL}" "${MODULE_NAME}"
+        cd "${MODULE_NAME}"
+        git remote set-url --push origin "git@github.com:dune-mirrors/${MODULE_NAME}.git"
+        git remote -v
+        echo "::endgroup::"
+
+        phase=fetch
+        echo "::group::fetch -p origin"
         git fetch -p origin
-        # Exclude refs created by GitHub for pull request.
+        echo "::endgroup::"
+
+        phase=inspect
+        echo "::group::ref inventory"
+        total=$(git for-each-ref | wc -l)
+        branches=$(git for-each-ref refs/heads | wc -l)
+        tags=$(git for-each-ref refs/tags | wc -l)
+        mr=$(git for-each-ref refs/merge-requests | wc -l)
+        echo "total refs: ${total} | branches: ${branches} | tags: ${tags} | merge-request refs (to drop): ${mr}"
+        echo "::endgroup::"
+
+        phase=cleanup
+        echo "::group::drop GitLab merge-request refs"
+        # Exclude GitLab merge-request refs (refs/merge-requests/*); GitHub rejects them on push.
         git for-each-ref --format 'delete %(refname)' refs/merge-requests | git update-ref --stdin
+        echo "dropped ${mr} merge-request ref(s)"
+        echo "::endgroup::"
+
+        phase=push
+        echo "::group::push --mirror"
         git push --mirror
+        echo "::endgroup::"
+
+        echo "✓ mirrored ${MODULE_NAME} (${branches} branches, ${tags} tags)"
 
   mirror-success:
     runs-on: ubuntu-24.04

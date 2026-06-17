@@ -14,6 +14,7 @@ from nacl import public
 HTTP_OK = 200
 HTTP_CREATED = 201
 HTTP_NO_CONTENT = 204
+HTTP_UNPROCESSABLE = 422
 
 # Load environment variables from .env file
 load_dotenv()
@@ -78,7 +79,10 @@ def generate_ssh_key(repo_name):
 
 
 def create_repo_if_not_exists(repo_name):
-    """Create a repository in the dune-mirrors organization if it doesn't exist"""
+    """Create a repository in the dune-mirrors organization if it doesn't exist.
+
+    Returns True if a new repository was created, False if it already existed.
+    """
     print(f"Checking if repository {repo_name} exists in {GITHUB_ORG} organization...")
 
     # Check if repository exists
@@ -86,7 +90,7 @@ def create_repo_if_not_exists(repo_name):
 
     if response.status_code == HTTP_OK:
         print(f"Repository {repo_name} already exists.")
-        return
+        return False
 
     print(f"Creating repository {repo_name} in {GITHUB_ORG} organization...")
 
@@ -105,13 +109,14 @@ def create_repo_if_not_exists(repo_name):
     )
 
     if response.status_code != HTTP_CREATED:
-        raise Exception(f"Failed to create repository: {response.text}")
+        raise Exception(f"Failed to create repository (HTTP {response.status_code}): {response.text}")
 
     print(f"Repository {repo_name} created successfully.")
+    return True
 
 
 def add_deploy_key_to_repo(repo_name, public_key):
-    """Add deploy key to a repository"""
+    """Add deploy key to a repository (idempotent across re-runs)."""
     print(f"Adding deploy key to {repo_name}...")
 
     response = requests.post(
@@ -120,10 +125,17 @@ def add_deploy_key_to_repo(repo_name, public_key):
         json={"title": "Mirror Deploy Key", "key": public_key, "read_only": False},
     )
 
-    if response.status_code != HTTP_CREATED:
-        raise Exception(f"Failed to add deploy key to repository: {response.text}")
+    if response.status_code == HTTP_CREATED:
+        print(f"Deploy key added to {repo_name} successfully.")
+        return
 
-    print(f"Deploy key added to {repo_name} successfully.")
+    # GitHub returns 422 when the key (or its title) already exists. Treat that as a
+    # no-op so re-running setup does not crash on an already-provisioned repo.
+    if response.status_code == HTTP_UNPROCESSABLE and "already" in response.text.lower():
+        print(f"Deploy key already present on {repo_name}, skipping.")
+        return
+
+    raise Exception(f"Failed to add deploy key (HTTP {response.status_code}): {response.text}")
 
 
 def add_secret_to_mirrorer_repo(secret_name, secret_value):
@@ -137,7 +149,7 @@ def add_secret_to_mirrorer_repo(secret_name, secret_value):
     )
 
     if response.status_code != HTTP_OK:
-        raise Exception(f"Failed to get public key for secrets: {response.text}")
+        raise Exception(f"Failed to get public key for secrets (HTTP {response.status_code}): {response.text}")
 
     public_key_data = response.json()
     public_key = public_key_data["key"]
@@ -161,7 +173,7 @@ def add_secret_to_mirrorer_repo(secret_name, secret_value):
     )
 
     if response.status_code not in (HTTP_CREATED, HTTP_NO_CONTENT):
-        raise Exception(f"Failed to add secret to repository: {response.text}")
+        raise Exception(f"Failed to add secret to repository (HTTP {response.status_code}): {response.text}")
 
     print(f"Secret {secret_name} added to {CURRENT_REPO} successfully.")
 
@@ -172,15 +184,22 @@ def main():
 
     # Load repository configuration
     repos = load_repos()
+    total = len(repos)
+    created = 0
+    existing = 0
+    secrets_written = 0
 
-    for repo_name, _repo_url in repos.items():
-        print(f"\nProcessing repository: {repo_name}")
+    for index, (repo_name, _repo_url) in enumerate(repos.items(), start=1):
+        print(f"\n[{index}/{total}] Processing repository: {repo_name}")
 
         # Generate SSH key pair
         private_key, public_key = generate_ssh_key(repo_name)
 
         # Create repository if it doesn't exist
-        create_repo_if_not_exists(repo_name)
+        if create_repo_if_not_exists(repo_name):
+            created += 1
+        else:
+            existing += 1
 
         # Add deploy key to repository
         add_deploy_key_to_repo(repo_name, public_key)
@@ -189,8 +208,14 @@ def main():
         # Replace hyphens with underscores in the repository name for the secret name
         secret_name = f"SSH_KEY_{repo_name.replace('-', '_')}"
         add_secret_to_mirrorer_repo(secret_name, private_key)
+        secrets_written += 1
 
     print("\nInfrastructure setup completed successfully.")
+    print(
+        f"Summary: {total} repo(s) processed "
+        f"({created} created, {existing} already existed), "
+        f"{secrets_written} secret(s) written.",
+    )
 
 
 if __name__ == "__main__":
