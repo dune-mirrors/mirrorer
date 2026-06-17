@@ -48,6 +48,28 @@ jobs:
   mirror-success:
     runs-on: ubuntu-24.04
     needs: mirror
+    # Only update the README on real mirror runs, not on pull requests.
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
     steps:
-    - name: All mirror jobs completed successfully
-      run: echo "All mirror jobs completed successfully"
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - name: Update last-updated timestamp in README
+      run: |
+        timestamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        sed -i \
+          "s|^Mirrors last updated at: .*|Mirrors last updated at: ${timestamp}|" \
+          README.md
+    - name: Commit and push if changed
+      run: |
+        git config user.name 'github-actions[bot]'
+        git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+        if git diff --quiet -- README.md; then
+          echo "README already up to date, nothing to commit."
+          exit 0
+        fi
+        git add README.md
+        git commit -m "chore: update mirrors last-updated timestamp [skip ci]"
+        git push origin main

@@ -2,6 +2,11 @@
 
 Mirrors configured repositories to the [dune-mirrors](https://github.com/dune-mirrors) org.
 
+<!-- last-updated:start -->
+Mirrors last updated at: never
+<!-- last-updated:end -->
+
+
 ## Configuration
 
 The repositories to be mirrored are defined in `repos.json`. This file contains a JSON object mapping repository names to their GitLab URLs. To add or remove repositories from the mirroring process, simply edit this file and push your changes to trigger an update.
