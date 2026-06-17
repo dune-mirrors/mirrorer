@@ -108,8 +108,6 @@ jobs:
     # "skipped" state (which branch protection treats as not passed, e.g. after a
     # partial "re-run failed jobs").
     if: always()
-    permissions:
-      contents: write
     steps:
     - name: Verify all mirror jobs succeeded
       env:
@@ -121,21 +119,39 @@ jobs:
           exit 1
         fi
         echo "All mirror jobs completed successfully"
-    # Record the last successful mirror time in the README. Only on real mirror
-    # runs (not pull requests), and only reached when the gate above passed.
+
+  update-readme:
+    runs-on: ubuntu-24.04
+    needs: mirror
+    # Record the last successful mirror time in the README on main. Only on real
+    # mirror runs (not pull requests); `needs: mirror` ensures it runs only when
+    # every mirror job succeeded. Kept separate from the mirror-success gate so a
+    # README push problem never makes the required check fail.
+    if: github.event_name != 'pull_request'
+    steps:
+    # main is a protected branch (requires PRs), so the default GITHUB_TOKEN
+    # cannot push to it. Push with a DUNE Mirrorer App token instead; the App
+    # must be granted access to the mirrorer repo and added to the branch
+    # protection "allow specified actors to bypass required pull requests" list.
+    - name: Generate token to update the README
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: "4076510"
+        private-key: ${{ secrets.DUNE_MIRRORER_PRIVATE_KEY }}
+        owner: dune-mirrors
+        repositories: mirrorer
     - uses: actions/checkout@v6
-      if: github.event_name != 'pull_request'
       with:
         ref: main
+        token: ${{ steps.app-token.outputs.token }}
     - name: Update last-updated timestamp in README
-      if: github.event_name != 'pull_request'
       run: |
         timestamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         sed -i \
           "s|^Mirrors last updated at: .*|Mirrors last updated at: ${timestamp}|" \
           README.md
     - name: Commit and push if changed
-      if: github.event_name != 'pull_request'
       run: |
         git config user.name 'github-actions[bot]'
         git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
