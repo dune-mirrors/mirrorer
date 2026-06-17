@@ -39,7 +39,7 @@ jobs:
     # target mirror repository and replaces the old per-repo SSH deploy keys.
     - name: Generate push token for ${{ matrix.module_name }}
       id: app-token
-      uses: actions/create-github-app-token@v1
+      uses: actions/create-github-app-token@v3
       with:
         app-id: "4076510"
         private-key: ${{ secrets.DUNE_MIRRORER_CERT }}
