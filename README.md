@@ -35,7 +35,7 @@ The mirroring process is implemented as a GitHub Actions workflow defined in `.g
 3. **Mirroring Process**:
    - For each repository in the matrix, a separate job runs in parallel
    - The job mints a short-lived installation token from the **DUNE Mirrorer** GitHub App
-     (its private key is stored in the `DUNE_MIRRORER_CERT` secret), scoped to just the
+     (its private key is stored in the `DUNE_MIRRORER_PRIVATE_KEY` secret), scoped to just the
      target mirror repository
    - It clones the GitLab repository with `--mirror` option to get all branches and tags
    - Sets the push URL to the corresponding repository in the dune-mirrors GitHub organization
@@ -47,7 +47,7 @@ The mirroring process is implemented as a GitHub Actions workflow defined in `.g
 Pushes to the `dune-mirrors` org are authenticated with the **DUNE Mirrorer** GitHub App
 rather than per-repository SSH deploy keys. The App must be installed on the organization
 with **Contents: write** permission and granted access to the mirror repositories. Only its
-private key (the `DUNE_MIRRORER_CERT` Actions secret) needs to be configured.
+private key (the `DUNE_MIRRORER_PRIVATE_KEY` Actions secret) needs to be configured.
 
 ## Installation and Dependencies
 

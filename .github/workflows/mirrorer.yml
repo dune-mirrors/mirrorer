@@ -35,7 +35,7 @@ jobs:
     steps:
     # Mint a short-lived installation token from the "DUNE Mirrorer" GitHub App
     # (app id 4076510 / client id Iv23liLgyeU7QoelDvvz). The app private key is
-    # stored in the DUNE_MIRRORER_CERT secret. The token is scoped to just the
+    # stored in the DUNE_MIRRORER_PRIVATE_KEY secret. The token is scoped to just the
     # target mirror repository and replaces the old per-repo SSH deploy keys.
     # NB: app-id is used rather than the newer client-id because actionlint's
     # bundled metadata does not yet recognise client-id; both are accepted by
@@ -45,7 +45,7 @@ jobs:
       uses: actions/create-github-app-token@v3
       with:
         app-id: "4076510"
-        private-key: ${{ secrets.DUNE_MIRRORER_CERT }}
+        private-key: ${{ secrets.DUNE_MIRRORER_PRIVATE_KEY }}
         owner: dune-mirrors
         repositories: ${{ matrix.module_name }}
     - name: Mirror ${{ matrix.module_name }}
