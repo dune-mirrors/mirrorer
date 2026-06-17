@@ -33,7 +33,7 @@ jobs:
       # each job gets "slug" and "url" and "module_name"
       matrix: ${{ fromJson(needs.repos.outputs.repos) }}
     steps:
-    - uses: webfactory/ssh-agent@v0.9.1
+    - uses: webfactory/ssh-agent@v0.10.0
       with:
         ssh-private-key: ${{ secrets[format('SSH_KEY_{0}', matrix.keyname )] }}
     - run: |
