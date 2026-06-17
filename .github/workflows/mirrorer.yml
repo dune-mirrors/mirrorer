@@ -30,39 +30,112 @@ jobs:
     needs: repos
     strategy:
       fail-fast: false
-      # each job gets "slug" and "url" and "module_name"
+      # each job gets "module_name" and "url"
       matrix: ${{ fromJson(needs.repos.outputs.repos) }}
     steps:
-    - uses: webfactory/ssh-agent@v0.9.1
+    # Mint a short-lived installation token from the "DUNE Mirrorer" GitHub App
+    # (app id 4076510 / client id Iv23liLgyeU7QoelDvvz). The app private key is
+    # stored in the DUNE_MIRRORER_PRIVATE_KEY secret. The token is scoped to just the
+    # target mirror repository and replaces the old per-repo SSH deploy keys.
+    # NB: app-id is used rather than the newer client-id because actionlint's
+    # bundled metadata does not yet recognise client-id; both are accepted by
+    # the action and app-id only emits a soft (non-fatal) deprecation warning.
+    - name: Generate push token for ${{ matrix.module_name }}
+      id: app-token
+      uses: actions/create-github-app-token@v3
       with:
-        ssh-private-key: ${{ secrets[format('SSH_KEY_{0}', matrix.keyname )] }}
-    - run: |
-        git clone --mirror ${{ matrix.url }} ${{ matrix.module_name }}
-        cd ${{ matrix.module_name }}
-        git remote set-url --push origin git@github.com:dune-mirrors/${{ matrix.module_name }}.git
+        app-id: "4076510"
+        private-key: ${{ secrets.DUNE_MIRRORER_PRIVATE_KEY }}
+        owner: dune-mirrors
+        repositories: ${{ matrix.module_name }}
+    - name: Mirror ${{ matrix.module_name }}
+      env:
+        MODULE_NAME: ${{ matrix.module_name }}
+        SOURCE_URL: ${{ matrix.url }}
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      run: |
+        set -euo pipefail
+        trap 'echo "::error title=mirror failed::${MODULE_NAME}: failed during \"${phase:-unknown}\" phase"' ERR
+
+        target="https://github.com/dune-mirrors/${MODULE_NAME}.git"
+        echo "=== Mirroring ${MODULE_NAME} ==="
+        echo "source: ${SOURCE_URL}"
+        echo "target: ${target}"
+
+        phase=clone
+        echo "::group::clone (mirror) ${SOURCE_URL}"
+        git clone --mirror "${SOURCE_URL}" "${MODULE_NAME}"
+        cd "${MODULE_NAME}"
+        git remote set-url --push origin "${target}"
+        git remote -v
+        echo "::endgroup::"
+
+        phase=fetch
+        echo "::group::fetch -p origin"
         git fetch -p origin
-        # Exclude refs created by GitHub for pull request.
+        echo "::endgroup::"
+
+        phase=inspect
+        echo "::group::ref inventory"
+        total=$(git for-each-ref | wc -l)
+        branches=$(git for-each-ref refs/heads | wc -l)
+        tags=$(git for-each-ref refs/tags | wc -l)
+        mr=$(git for-each-ref refs/merge-requests | wc -l)
+        echo "total refs: ${total} | branches: ${branches} | tags: ${tags} | merge-request refs (to drop): ${mr}"
+        echo "::endgroup::"
+
+        phase=cleanup
+        echo "::group::drop GitLab merge-request refs"
+        # Exclude GitLab merge-request refs (refs/merge-requests/*); GitHub rejects them on push.
         git for-each-ref --format 'delete %(refname)' refs/merge-requests | git update-ref --stdin
-        git push --mirror
+        echo "dropped ${mr} merge-request ref(s)"
+        echo "::endgroup::"
+
+        phase=push
+        echo "::group::push --mirror"
+        # Supply the App token via an HTTP auth header so it is never written to
+        # .git/config or shown in the remote URL.
+        auth=$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)
+        git -c http.extraheader="AUTHORIZATION: basic ${auth}" push --mirror
+        echo "::endgroup::"
+
+        echo "✓ mirrored ${MODULE_NAME} (${branches} branches, ${tags} tags)"
 
   mirror-success:
     runs-on: ubuntu-24.04
     needs: mirror
-    # Only update the README on real mirror runs, not on pull requests.
-    if: github.event_name != 'pull_request'
+    # Always run so this gate reports an explicit pass/fail and is never left in a
+    # "skipped" state (which branch protection treats as not passed, e.g. after a
+    # partial "re-run failed jobs").
+    if: always()
     permissions:
       contents: write
     steps:
+    - name: Verify all mirror jobs succeeded
+      env:
+        MIRROR_RESULT: ${{ needs.mirror.result }}
+      run: |
+        echo "mirror jobs result: ${MIRROR_RESULT}"
+        if [ "${MIRROR_RESULT}" != "success" ]; then
+          echo "::error::one or more mirror jobs did not succeed (result: ${MIRROR_RESULT})"
+          exit 1
+        fi
+        echo "All mirror jobs completed successfully"
+    # Record the last successful mirror time in the README. Only on real mirror
+    # runs (not pull requests), and only reached when the gate above passed.
     - uses: actions/checkout@v6
+      if: github.event_name != 'pull_request'
       with:
         ref: main
     - name: Update last-updated timestamp in README
+      if: github.event_name != 'pull_request'
       run: |
         timestamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         sed -i \
           "s|^Mirrors last updated at: .*|Mirrors last updated at: ${timestamp}|" \
           README.md
     - name: Commit and push if changed
+      if: github.event_name != 'pull_request'
       run: |
         git config user.name 'github-actions[bot]'
         git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
