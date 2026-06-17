@@ -18,7 +18,7 @@ jobs:
     outputs:
       repos: ${{ steps.repos.outputs.repos }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - id: repos
       run: |
         { echo 'repos<<EOF' ;
@@ -53,7 +53,7 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         ref: main
     - name: Update last-updated timestamp in README
