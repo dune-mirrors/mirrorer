@@ -104,21 +104,38 @@ jobs:
   mirror-success:
     runs-on: ubuntu-24.04
     needs: mirror
-    # Only update the README on real mirror runs, not on pull requests.
-    if: github.event_name != 'pull_request'
+    # Always run so this gate reports an explicit pass/fail and is never left in a
+    # "skipped" state (which branch protection treats as not passed, e.g. after a
+    # partial "re-run failed jobs").
+    if: always()
     permissions:
       contents: write
     steps:
+    - name: Verify all mirror jobs succeeded
+      env:
+        MIRROR_RESULT: ${{ needs.mirror.result }}
+      run: |
+        echo "mirror jobs result: ${MIRROR_RESULT}"
+        if [ "${MIRROR_RESULT}" != "success" ]; then
+          echo "::error::one or more mirror jobs did not succeed (result: ${MIRROR_RESULT})"
+          exit 1
+        fi
+        echo "All mirror jobs completed successfully"
+    # Record the last successful mirror time in the README. Only on real mirror
+    # runs (not pull requests), and only reached when the gate above passed.
     - uses: actions/checkout@v6
+      if: github.event_name != 'pull_request'
       with:
         ref: main
     - name: Update last-updated timestamp in README
+      if: github.event_name != 'pull_request'
       run: |
         timestamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         sed -i \
           "s|^Mirrors last updated at: .*|Mirrors last updated at: ${timestamp}|" \
           README.md
     - name: Commit and push if changed
+      if: github.event_name != 'pull_request'
       run: |
         git config user.name 'github-actions[bot]'
         git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
