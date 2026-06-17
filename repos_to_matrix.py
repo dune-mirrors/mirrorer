@@ -36,18 +36,7 @@ def load_repos():
 
 def build_matrix(repos):
     """Build the GitHub Actions matrix include list from the repo config."""
-    return {
-        "include": [
-            {
-                "module_name": repo,
-                "url": url,
-                # keyname is used to look up the per-repo SSH secret SSH_KEY_<keyname>;
-                # GitHub secret names cannot contain hyphens, so map them to underscores.
-                "keyname": repo.replace("-", "_"),
-            }
-            for repo, url in repos.items()
-        ]
-    }
+    return {"include": [{"module_name": repo, "url": url} for repo, url in repos.items()]}
 
 
 def main():

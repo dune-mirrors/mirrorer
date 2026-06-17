@@ -30,29 +30,40 @@ jobs:
     needs: repos
     strategy:
       fail-fast: false
-      # each job gets "slug" and "url" and "module_name"
+      # each job gets "module_name" and "url"
       matrix: ${{ fromJson(needs.repos.outputs.repos) }}
     steps:
-    - uses: webfactory/ssh-agent@v0.9.1
+    # Mint a short-lived installation token from the "DUNE Mirrorer" GitHub App
+    # (app id 4076510 / client id Iv23liLgyeU7QoelDvvz). The app private key is
+    # stored in the DUNE_MIRRORER_CERT secret. The token is scoped to just the
+    # target mirror repository and replaces the old per-repo SSH deploy keys.
+    - name: Generate push token for ${{ matrix.module_name }}
+      id: app-token
+      uses: actions/create-github-app-token@v1
       with:
-        ssh-private-key: ${{ secrets[format('SSH_KEY_{0}', matrix.keyname )] }}
+        app-id: "4076510"
+        private-key: ${{ secrets.DUNE_MIRRORER_CERT }}
+        owner: dune-mirrors
+        repositories: ${{ matrix.module_name }}
     - name: Mirror ${{ matrix.module_name }}
       env:
         MODULE_NAME: ${{ matrix.module_name }}
         SOURCE_URL: ${{ matrix.url }}
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
         set -euo pipefail
         trap 'echo "::error title=mirror failed::${MODULE_NAME}: failed during \"${phase:-unknown}\" phase"' ERR
 
+        target="https://github.com/dune-mirrors/${MODULE_NAME}.git"
         echo "=== Mirroring ${MODULE_NAME} ==="
         echo "source: ${SOURCE_URL}"
-        echo "target: git@github.com:dune-mirrors/${MODULE_NAME}.git"
+        echo "target: ${target}"
 
         phase=clone
         echo "::group::clone (mirror) ${SOURCE_URL}"
         git clone --mirror "${SOURCE_URL}" "${MODULE_NAME}"
         cd "${MODULE_NAME}"
-        git remote set-url --push origin "git@github.com:dune-mirrors/${MODULE_NAME}.git"
+        git remote set-url --push origin "${target}"
         git remote -v
         echo "::endgroup::"
 
@@ -79,7 +90,10 @@ jobs:
 
         phase=push
         echo "::group::push --mirror"
-        git push --mirror
+        # Supply the App token via an HTTP auth header so it is never written to
+        # .git/config or shown in the remote URL.
+        auth=$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)
+        git -c http.extraheader="AUTHORIZATION: basic ${auth}" push --mirror
         echo "::endgroup::"
 
         echo "✓ mirrored ${MODULE_NAME} (${branches} branches, ${tags} tags)"
