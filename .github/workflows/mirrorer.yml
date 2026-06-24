@@ -18,7 +18,7 @@ jobs:
     outputs:
       repos: ${{ steps.repos.outputs.repos }}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - id: repos
       run: |
         { echo 'repos<<EOF' ;
@@ -141,7 +141,7 @@ jobs:
         private-key: ${{ secrets.DUNE_MIRRORER_PRIVATE_KEY }}
         owner: dune-mirrors
         repositories: mirrorer
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         ref: main
         token: ${{ steps.app-token.outputs.token }}
