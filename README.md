@@ -49,6 +49,14 @@ rather than per-repository SSH deploy keys. The App must be installed on the org
 with **Contents: write** permission and granted access to the mirror repositories. Only its
 private key (the `DUNE_MIRRORER_PRIVATE_KEY` Actions secret) needs to be configured.
 
+The `update-readme` job also pushes the "last updated" timestamp back to the protected
+`main` branch. `main` requires the `mirror-success` status check, which a fresh `[skip ci]`
+commit can never carry on its own SHA, and the App's pull-request bypass does not waive
+required status checks. The job therefore publishes the commit on a throwaway branch,
+asserts `mirror-success` on that commit via the GitHub Statuses API, then fast-forwards
+`main`. For this the App additionally needs **Commit statuses: write** permission and must
+be on the branch protection "allow specified actors to bypass required pull requests" list.
+
 ## Installation and Dependencies
 
 This project uses `pyproject.toml` for dependency management. The required dependencies are:
