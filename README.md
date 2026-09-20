@@ -18,6 +18,52 @@ Example format:
 }
 ```
 
+### Per-repository options
+
+A repository that needs more than a URL may instead map to an object with a
+required `url` plus optional settings:
+
+```json
+{
+    "repository-name": {
+        "url": "https://gitlab.dune-project.org/path/to/repository.git",
+        "strip_blobs_bigger_than": "100M"
+    }
+}
+```
+
+| Option | Meaning |
+|--------|---------|
+| `strip_blobs_bigger_than` | Rewrite history with `git-filter-repo` before pushing, removing every blob larger than this (a number with an optional `K`/`M`/`G` suffix). |
+
+**`strip_blobs_bigger_than` rewrites history, so use it only where a mirror is
+otherwise impossible.** GitHub refuses any pushed blob over 100 MB (`GH001`)
+and declines the *entire* push when it finds one, so a single oversized blob
+anywhere in a repository's history freezes that whole mirror — every branch and
+tag, not just the ones carrying the blob.
+
+`dune-alugrid` is the one repository in this configuration that hits this. It
+carries two benchmark outputs (`results/mb_kway_314/mb.2048.out`, 506 MB, and
+`mb.4096.out`, 435 MB) that were committed in February 2014 and deleted again a
+fortnight later. They are absent from every current tree but sit in the
+ancestry of **82 of its 83** branches and tags, so no choice of refs avoids
+them. This is why `dune-mirrors/dune-alugrid` sat frozen at `releases/2.6` with
+no tags for years: it was seeded before those commits, and every refresh since
+would have been rejected.
+
+Consequences to be aware of before adding this to another repository:
+
+- **The mirror's commit hashes diverge from upstream.** Everything from the
+  first affected commit onward is rewritten. Anything pinning a mirror commit
+  must pin the *rewritten* hash. (File contents are untouched: the rewritten
+  `releases/2.10` tip has the identical tree to its upstream counterpart.)
+- **The rewrite must stay reproducible**, or every refresh would produce new
+  hashes and break downstream pins. The `git-filter-repo` version is therefore
+  pinned in the workflow; bumping it means re-verifying that the hashes are
+  unchanged, and treating any change as a breaking one for downstream pins.
+- **The first push after enabling this is effectively a force-push**, since it
+  replaces whatever the mirror held before.
+
 ## Workflow Description
 
 The mirroring process is implemented as a GitHub Actions workflow defined in `.github/workflows/mirrorer.yml`. The workflow operates as follows:
