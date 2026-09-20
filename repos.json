@@ -1,4 +1,5 @@
 {
+    "dune-alugrid": "https://gitlab.dune-project.org/extensions/dune-alugrid.git",
     "dune-grid-glue": "https://gitlab.dune-project.org/extensions/dune-grid-glue.git",
     "dune-spgrid": "https://gitlab.dune-project.org/extensions/dune-spgrid.git",
     "dune-testtools": "https://gitlab.dune-project.org/quality/dune-testtools.git",
