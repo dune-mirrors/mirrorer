@@ -48,10 +48,17 @@ jobs:
         private-key: ${{ secrets.DUNE_MIRRORER_PRIVATE_KEY }}
         owner: dune-mirrors
         repositories: ${{ matrix.module_name }}
+    # Only needed by repositories that set "strip_blobs_bigger_than" in
+    # repos.json. Pinned: the rewritten commit hashes are what downstream
+    # consumers pin to, so the rewrite must stay byte-for-byte reproducible.
+    - name: Install git-filter-repo for ${{ matrix.module_name }}
+      if: matrix.strip_blobs_bigger_than != ''
+      run: pipx install git-filter-repo==2.47.0
     - name: Mirror ${{ matrix.module_name }}
       env:
         MODULE_NAME: ${{ matrix.module_name }}
         SOURCE_URL: ${{ matrix.url }}
+        STRIP_BLOBS_BIGGER_THAN: ${{ matrix.strip_blobs_bigger_than }}
         GH_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
         set -euo pipefail
@@ -90,6 +97,32 @@ jobs:
         git for-each-ref --format 'delete %(refname)' refs/merge-requests | git update-ref --stdin
         echo "dropped ${mr} merge-request ref(s)"
         echo "::endgroup::"
+
+        if [ -n "${STRIP_BLOBS_BIGGER_THAN}" ]; then
+          phase=filter
+          echo "::group::strip blobs bigger than ${STRIP_BLOBS_BIGGER_THAN}"
+          # GitHub hard-rejects any pushed blob over 100 MB (GH001) and declines
+          # the ENTIRE push when it finds one, so a single oversized blob
+          # anywhere in history freezes the whole mirror. dune-alugrid carries
+          # two ~500 MB benchmark outputs that were committed and deleted again
+          # in 2014, leaving them in the ancestry of 82 of its 83 refs. Rewrite
+          # them out so the rest of the history can be mirrored at all.
+          #
+          # This rewrites commit hashes from the first affected commit onward,
+          # so this mirror's SHAs deliberately diverge from upstream GitLab.
+          # The rewrite is deterministic for a pinned git-filter-repo version,
+          # so later runs reproduce the same hashes and fast-forward normally.
+          git filter-repo \
+            --strip-blobs-bigger-than "${STRIP_BLOBS_BIGGER_THAN}" \
+            --replace-refs delete-no-add \
+            --force
+          # filter-repo drops the remote as a safety measure; restore it so the
+          # push phase below still has an "origin" to push to. Remove first so
+          # this does not abort under "set -e" if a future filter-repo keeps it.
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "${target}"
+          echo "::endgroup::"
+        fi
 
         phase=push
         echo "::group::push --mirror"

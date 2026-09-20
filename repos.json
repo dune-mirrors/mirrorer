@@ -1,4 +1,8 @@
 {
+    "dune-alugrid": {
+        "url": "https://gitlab.dune-project.org/extensions/dune-alugrid.git",
+        "strip_blobs_bigger_than": "100M"
+    },
     "dune-grid-glue": "https://gitlab.dune-project.org/extensions/dune-grid-glue.git",
     "dune-spgrid": "https://gitlab.dune-project.org/extensions/dune-spgrid.git",
     "dune-testtools": "https://gitlab.dune-project.org/quality/dune-testtools.git",
