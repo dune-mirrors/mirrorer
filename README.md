@@ -3,7 +3,7 @@
 Mirrors configured repositories to the [dune-mirrors](https://github.com/dune-mirrors) org.
 
 <!-- last-updated:start -->
-Mirrors last updated at: 2026-11-26 06:33:12 UTC
+Mirrors last updated at: 2026-11-27 06:23:55 UTC
 <!-- last-updated:end -->
 
 
